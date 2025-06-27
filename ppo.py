@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.distributions import Categorical
-import gym
 from collections import deque
 import matplotlib.pyplot as plt
 
@@ -30,18 +29,21 @@ class ActorCritic(nn.Module):
         self.critic = nn.Linear(hidden_dim, 1)
         
     def forward(self, state):
+        """
+        Propaga lo stato attraverso la rete per ottenere probabilità delle azioni e valore dello stato
+        """
         shared_features = self.shared(state)
-        
-        # Policy: probabilità per ogni azione
+    
         action_probs = F.softmax(self.actor(shared_features), dim=-1)
         
-        # Value function: valore stimato dello stato
         state_value = self.critic(shared_features)
         
         return action_probs, state_value
     
     def act(self, state):
-        """Seleziona un'azione dato uno stato"""
+        """
+        Seleziona un'azione dato uno stato
+        """
         action_probs, state_value = self.forward(state)
         dist = Categorical(action_probs)
         action = dist.sample()
@@ -49,6 +51,9 @@ class ActorCritic(nn.Module):
         return action.item(), dist.log_prob(action), state_value
 
 class PPOAgent:
+    """
+    Agente PPO (Proximal Policy Optimization)
+    """
     def __init__(self, state_dim, action_dim, lr=3e-4, gamma=0.99, 
                  eps_clip=0.2, k_epochs=10, gae_lambda=0.95, 
                  minibatch_size=64, horizon=2048, c1=1.0, c2=0.01):
@@ -111,7 +116,7 @@ class PPOAgent:
         return advantages
     
     def update(self):
-        """Aggiorna la policy usando l'algoritmo PPO con iperparametri del paper"""
+        """Aggiorna la policy usando l'algoritmo PPO"""
         if len(self.memory['states']) == 0:
             return
         
