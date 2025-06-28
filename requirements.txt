@@ -1,0 +1,22 @@
+# PPO Project Requirements
+# Installa con: pip install -r requirements.txt
+
+# PyTorch 
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+
+# Gymnasium e Stable Baselines3
+swig>=4.1.0
+gymnasium>=0.28.0
+gymnasium[classic_control]>=0.28.0
+stable-baselines3>=2.0.0
+stable-baselines3[extra]>=2.0.0
+
+# Data Science e Plotting
+numpy>=1.21.0
+matplotlib>=3.5.0
+seaborn>=0.11.0
+
+# Utilità
+tqdm>=4.64.0

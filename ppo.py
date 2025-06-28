@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch.distributions import Categorical
 from collections import deque
 import matplotlib.pyplot as plt
+import gymnasium as gym
 
 class ActorCritic(nn.Module):
     """
@@ -139,9 +140,11 @@ class PPOAgent:
         # Calcola advantages e returns
         advantages = self.compute_gae(rewards, values, dones, next_value)
         advantages = torch.FloatTensor(advantages)
-        returns = advantages + torch.FloatTensor(values[:-1])
         
-        # Normalizza gli advantages (best practice non esplicitamente nel paper)
+        values_tensor = torch.FloatTensor(values[:len(advantages)])
+        returns = advantages + values_tensor
+
+        # Normalizza gli advantages
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         
         # Prepare data for minibatch training
@@ -200,3 +203,88 @@ class PPOAgent:
         """Pulisce il buffer delle esperienze"""
         for key in self.memory:
             self.memory[key] = []
+
+def train_ppo(env_name='CartPole-v1', total_timesteps=1000000, save_model_flag=True):
+    """
+    Training PPO:
+    - Raccoglie horizon=2048 timesteps prima di ogni update
+    - Usa minibatch SGD per K=10 epoche
+    - Iperparametri identici al paper "Proximal Policy Optimization Algorithms" (Schulman et al., 2017)
+    """
+    env = gym.make(env_name)
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.n
+    
+    agent = PPOAgent(
+        state_dim=state_dim, 
+        action_dim=action_dim,
+        lr=3e-4,
+        gamma=0.99,
+        eps_clip=0.2,
+        k_epochs=10,
+        gae_lambda=0.95,
+        minibatch_size=64,
+        horizon=2048,
+        c1=1.0,
+        c2=0.01
+    )
+    
+    scores = deque(maxlen=100)
+    episode_scores = []
+    timesteps = 0
+    episode = 0
+    
+    state = env.reset()
+    if isinstance(state, tuple):
+        state = state[0]
+    
+    print("🚀 Training PPO...")
+    print(f"📋 Horizon: {agent.horizon}, Epochs: {agent.k_epochs}, Minibatch: {agent.minibatch_size}")
+    
+    best_avg_score = -float('inf')
+    
+    while timesteps < total_timesteps:
+        episode_score = 0
+        episode_steps = 0
+        
+        while timesteps < total_timesteps:
+            action, log_prob, value = agent.policy.act(torch.FloatTensor(state).unsqueeze(0))
+            next_state, reward, done, _, _ = env.step(action)
+            
+            agent.remember(state, action, reward, log_prob.item(), value, done)
+            
+            state = next_state
+            episode_score += reward
+            episode_steps += 1
+            timesteps += 1
+            
+            if agent.should_update():
+                print(f"🔄 Update a timestep {timesteps} (horizon raggiunto)")
+                agent.update()
+                
+            if done:
+                scores.append(episode_score)
+                episode_scores.append(episode_score)
+                episode += 1
+                
+                state = env.reset()
+                if isinstance(state, tuple):
+                    state = state[0]
+                
+                # Salva il miglior modello
+                if len(scores) >= 100:
+                    current_avg = np.mean(list(scores))
+                    if current_avg > best_avg_score and save_model_flag:
+                        best_avg_score = current_avg
+                        print(f"🏆 Nuovo miglior modello! Avg score: {current_avg:.2f}")
+                
+                if episode % 10 == 0:
+                    avg_score = np.mean(list(scores)[-10:]) if len(scores) >= 10 else np.mean(scores)
+                    print(f"📊 Episodio {episode}, Timesteps: {timesteps}, Score medio (ultimi 10): {avg_score:.2f}")
+                
+                break
+    
+    env.close()
+    
+    print(f"✅ Training completato! Episodi totali: {episode}, Timesteps: {timesteps}")
+    return episode_scores, agent
