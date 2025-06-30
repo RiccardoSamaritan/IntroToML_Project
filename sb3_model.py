@@ -55,5 +55,5 @@ def train_sb3_ppo(env_name, total_timesteps):
     
     env.close()
     
-    print(f"  ✅ SB3 completed in {training_time:.2f} seconds")
+    print(f"SB3 completed in {training_time:.2f} seconds")
     return model, callback.episode_rewards, training_time

@@ -182,16 +182,16 @@ class PPOAgent:
                 surr2 = torch.clamp(ratio, 1 - self.eps_clip, 1 + self.eps_clip) * batch_advantages
                 actor_loss = -torch.min(surr1, surr2).mean()
                 
-                # Loss del critic (Mean Squared Error)
+                # Critic loss (MSE tra valore stimato e ritorno)
                 critic_loss = F.mse_loss(state_values.squeeze(), batch_returns)
                 
-                # Loss totale con coefficienti del paper (Equazione 9)
+                # Loss totale
                 total_loss = actor_loss + self.c1 * critic_loss - self.c2 * entropy
                 
                 # Aggiornamento gradiente
                 self.optimizer.zero_grad()
                 total_loss.backward()
-                # Gradient clipping come best practice (non specificato nel paper)
+                # Gradient clipping come best practice
                 torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 0.5)
                 self.optimizer.step()
         
@@ -206,10 +206,7 @@ class PPOAgent:
 
 def train_ppo(env_name='CartPole-v1', total_timesteps=1000000, save_model_flag=True):
     """
-    Training PPO:
-    - Raccoglie horizon=2048 timesteps prima di ogni update
-    - Usa minibatch SGD per K=10 epoche
-    - Iperparametri identici al paper "Proximal Policy Optimization Algorithms" (Schulman et al., 2017)
+    Training PPO 
     """
     env = gym.make(env_name)
     state_dim = env.observation_space.shape[0]
@@ -229,62 +226,68 @@ def train_ppo(env_name='CartPole-v1', total_timesteps=1000000, save_model_flag=T
         c2=0.01
     )
     
-    scores = deque(maxlen=100)
     episode_scores = []
     timesteps = 0
     episode = 0
     
-    state = env.reset()
-    if isinstance(state, tuple):
-        state = state[0]
-    
-    print("🚀 Training PPO...")
-    print(f"📋 Horizon: {agent.horizon}, Epochs: {agent.k_epochs}, Minibatch: {agent.minibatch_size}")
-    
-    best_avg_score = -float('inf')
+    print("Training PPO...")
+    print(f"Horizon: {agent.horizon}, Epochs: {agent.k_epochs}, Minibatch: {agent.minibatch_size}")
     
     while timesteps < total_timesteps:
+        # Reset environment per nuovo episodio
+        state = env.reset()
+        if isinstance(state, tuple):
+            state = state[0]
+        
         episode_score = 0
         episode_steps = 0
+        done = False
         
-        while timesteps < total_timesteps:
+        while not done and timesteps < total_timesteps:
+            # Seleziona azione
             action, log_prob, value = agent.policy.act(torch.FloatTensor(state).unsqueeze(0))
-            next_state, reward, done, _, _ = env.step(action)
             
+            # Esegui step
+            next_state, reward, terminated, truncated, _ = env.step(action)
+            done = terminated or truncated
+
             agent.remember(state, action, reward, log_prob.item(), value, done)
             
+            # Aggiorna stato e contatori
             state = next_state
             episode_score += reward
             episode_steps += 1
             timesteps += 1
             
             if agent.should_update():
-                print(f"🔄 Update a timestep {timesteps} (horizon raggiunto)")
+                print(f"Update at timestep {timesteps} (horizon reached)")
                 agent.update()
-                
-            if done:
-                scores.append(episode_score)
-                episode_scores.append(episode_score)
-                episode += 1
-                
-                state = env.reset()
-                if isinstance(state, tuple):
-                    state = state[0]
-                
-                # Salva il miglior modello
-                if len(scores) >= 100:
-                    current_avg = np.mean(list(scores))
-                    if current_avg > best_avg_score and save_model_flag:
-                        best_avg_score = current_avg
-                        print(f"🏆 Nuovo miglior modello! Avg score: {current_avg:.2f}")
-                
-                if episode % 10 == 0:
-                    avg_score = np.mean(list(scores)[-10:]) if len(scores) >= 10 else np.mean(scores)
-                    print(f"📊 Episodio {episode}, Timesteps: {timesteps}, Score medio (ultimi 10): {avg_score:.2f}")
-                
-                break
+        
+        episode_scores.append(episode_score)
+        episode += 1
+        
+        if episode % 10 == 0:
+            recent_scores = episode_scores[-10:]
+            avg_score = np.mean(recent_scores)
+            max_score = max(recent_scores)
+            min_score = min(recent_scores)
+            
+            print(f"Episode {episode}, Timesteps: {timesteps}")
+            print(f"   Last episode: {episode_score} steps")
+            print(f"   Avg (last 10): {avg_score:.1f} (min: {min_score}, max: {max_score})")
     
     env.close()
     
-    print(f"✅ Training completato! Episodi totali: {episode}, Timesteps: {timesteps}")
+    print(f"Training completed! Episodes: {episode}, Timesteps: {timesteps}")
+    
+    if episode_scores:
+        final_avg = np.mean(episode_scores[-100:]) if len(episode_scores) >= 100 else np.mean(episode_scores)
+        final_max = max(episode_scores)
+        final_min = min(episode_scores)
+        
+        print(f"Final Statistics:")
+        print(f"   Average (last 100): {final_avg:.2f}")
+        print(f"   Max episode score: {final_max}")
+        print(f"   Min episode score: {final_min}")
+    
     return episode_scores, agent

@@ -12,7 +12,7 @@ class RandomAgent:
     
 def train_random_agent(env_name, total_timesteps):
     """Training del Random Agent (giusto per raccogliere statistiche)"""
-    print("🎲 Training Random Agent...")
+    print("Training Random Agent...")
     
     env = gym.make(env_name)
     action_dim = env.action_space.n
