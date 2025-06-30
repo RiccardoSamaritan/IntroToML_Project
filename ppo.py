@@ -100,15 +100,12 @@ class PPOAgent:
     def compute_gae(self, rewards, values, dones, next_value):
         """
         Calcola Generalized Advantage Estimation (GAE)
-        Fornisce stime più stabili dell'advantage
         """
         advantages = []
         gae = 0
         
-        # Aggiungi il valore del prossimo stato
         values = values + [next_value]
         
-        # Calcola GAE all'indietro
         for i in reversed(range(len(rewards))):
             delta = rewards[i] + self.gamma * values[i + 1] * (1 - dones[i]) - values[i]
             gae = delta + self.gamma * self.gae_lambda * (1 - dones[i]) * gae
@@ -185,12 +182,15 @@ class PPOAgent:
                 # Critic loss (MSE tra valore stimato e ritorno)
                 critic_loss = F.mse_loss(state_values.squeeze(), batch_returns)
                 
-                # Loss totale
-                total_loss = actor_loss + self.c1 * critic_loss - self.c2 * entropy
+                # Entropy bonus
+                entropy = dist.entropy().mean()
+                
+                total_loss = actor_loss - self.c1 * critic_loss + self.c2 * entropy
                 
                 # Aggiornamento gradiente
                 self.optimizer.zero_grad()
                 total_loss.backward()
+                
                 # Gradient clipping come best practice
                 torch.nn.utils.clip_grad_norm_(self.policy.parameters(), 0.5)
                 self.optimizer.step()
